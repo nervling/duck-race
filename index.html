@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Championship Duck Derby</title>
+  <style>
+    :root { --bg: #0b1120; --panel: #1e293b; --accent: #facc15; --text: #f8fafc; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    body {
+      background: radial-gradient(circle at top, #1e293b 0%, #0b1120 100%);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 18px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 1180px;
+      margin-bottom: 12px;
+      background: rgba(30, 41, 59, 0.88);
+      backdrop-filter: blur(10px);
+      padding: 12px 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    }
+    .title-group h1 { font-size: 1.35rem; font-weight: 800; color: var(--accent); letter-spacing: 0.3px; }
+    .title-group a, .title-group span { font-size: 0.8rem; color: #38bdf8; text-decoration: none; }
+    .title-group a:hover { text-decoration: underline; }
+    .live-ticker {
+      font-size: 0.9rem;
+      background: #0f172a;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      white-space: nowrap;
+    }
+    .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    #search-duck {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #38bdf8;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      width: 185px;
+      outline: none;
+    }
+    #search-duck::placeholder { color: #64748b; }
+    #timer {
+      font-variant-numeric: tabular-nums;
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #38bdf8;
+      background: #0f172a;
+      padding: 7px 12px;
+      border-radius: 8px;
+    }
+    button {
+      background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+      color: #0f172a;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 800;
+      cursor: pointer;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(234, 179, 8, 0.25);
+    }
+    button:hover { filter: brightness(1.08); }
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 1180px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.65);
+      border: 3px solid #38bdf8;
+      cursor: crosshair;
+    }
+    canvas { display: block; width: 100%; height: auto; }
+    #results {
+      margin-top: 22px;
+      width: 100%;
+      max-width: 1180px;
+      background: rgba(30, 41, 59, 0.92);
+      border-radius: 16px;
+      padding: 22px;
+      border: 1px solid rgba(255,255,255,0.1);
+      display: none;
+    }
+    .podium {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .podium-spot { display: flex; flex-direction: column; align-items: center; width: 175px; text-align: center; }
+    .podium-name { font-weight: 800; font-size: 1rem; margin-bottom: 8px; color: #fff; word-break: break-word; }
+    .podium-bar {
+      width: 100%;
+      border-radius: 10px 10px 0 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: #0f172a;
+    }
+    .first .podium-bar { height: 108px; background: linear-gradient(180deg, #fde047, #ca8a04); box-shadow: 0 0 25px rgba(250,204,21,0.35); }
+    .second .podium-bar { height: 80px; background: linear-gradient(180deg, #e2e8f0, #94a3b8); }
+    .third .podium-bar { height: 60px; background: linear-gradient(180deg, #fdba74, #c2410c); }
+    .full-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+      gap: 8px;
+      max-height: 440px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+    .rank-card {
+      background: #0f172a;
+      padding: 8px 12px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .rank-card.highlight { border-color: #facc15; background: rgba(250, 204, 21, 0.14); }
+    .rank-num { font-weight: 800; color: #38bdf8; margin-right: 8px; }
+    .rank-time { font-size: 0.78rem; color: #64748b; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1 id="race-title">Championship Duck Derby</h1>
+      <span id="race-subtitle">Loading racers...</span>
+    </div>
+    <div class="live-ticker" id="live-ticker">Waiting for start horn...</div>
+    <div class="controls">
+      <input type="text" id="search-duck" placeholder="🔍 Spotlight a duck..." />
+      <span id="timer">00.0s</span>
+      <button id="replay-btn">Replay</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <canvas id="raceCanvas" width="1180" height="640"></canvas>
+  </div>
+
+  <div id="results">
+    <div class="podium" id="podium"></div>
+    <div class="full-list" id="results-list"></div>
+  </div>
+
+<script>
+  const DEFAULT_GITHUB_USER = "nervling";
+  const DEFAULT_GIST_ID = "3b99e05c9bd5c41d3effabdfb34810a4";
+
+  // Parse either JSON {"results": [...]} OR plain numbered text pasted into a Gist!
+  function parseGistContent(rawText, gistId) {
+    try {
+      const data = JSON.parse(rawText);
+      if (Array.isArray(data.results) && data.results.length > 0) return data;
+      if (Array.isArray(data) && data.length > 0) return { title: "Official Duck Derby", results: data };
+    } catch (_) {
+      // If user pasted raw numbered Random.org text into the Gist instead of JSON, parse it automatically!
+      const cleaned = rawText
+        .split(/\r?\n/)
+        .map(line => line.trim().replace(/^\d+\.[\s\u00A0]+/, "").replace(/#\d+$/, "").trim())
+        .filter(Boolean);
+      if (cleaned.length > 0) {
+        return { title: "Official Duck Derby", results: cleaned, verifyId: null };
+      }
+    }
+    return null;
+  }
+
+  async function loadRaceData() {
+    if (window.SERVER_RACE_DATA) return window.SERVER_RACE_DATA;
+
+    const params = new URLSearchParams(window.location.search);
+    const gistParam = params.get("gist") || DEFAULT_GIST_ID;
+
+    if (gistParam) {
+      document.getElementById("live-ticker").textContent = "Loading race from Gist CDN...";
+      try {
+        // Clean full gist URLs if someone passes ?gist=https://gist.github.com/nervling/3b99...
+        let cleanPath = gistParam.trim().replace(/^https?:\/\/gist\.github\.com\//, "").replace(/\/+$/, "");
+        if (!cleanPath.includes("/")) {
+          cleanPath = `${DEFAULT_GITHUB_USER}/${cleanPath}`;
+        }
+
+        // /raw with no filename automatically serves the first file in the Gist over Fastly CDN with CORS (*)
+        const rawUrl = `https://gist.githubusercontent.com/${cleanPath}/raw`;
+        const res = await fetch(rawUrl);
+        if (res.ok) {
+          const text = await res.text();
+          const data = parseGistContent(text, cleanPath);
+          if (data && data.results.length > 0) {
+            if (!data.seed) {
+              const seedStr = data.verifyId || cleanPath || data.results.slice(0, 10).join("");
+              data.seed = Array.from(seedStr).reduce((acc, c) => acc * 31 + c.charCodeAt(0), 7);
+            }
+            return data;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch Gist:", e);
+      }
+    }
+
+    // Fallback 100-Duck Race if offline
+    const fallbackNames = [
+      "Kevin(2)", "Eric (NE)(3)", "KAWJ(5)", "SixPackOfMillers", "CartyFam",
+      "Kevin G(1)", "Nick", "hellcat(2)", "Kevin G(2)", "AfternoonDeelite"
+    ];
+    return {
+      title: "Official Duck Derby (Fallback)",
+      results: fallbackNames,
+      seed: 20261024,
+      verifyId: "yzzgsj"
+    };
+  }
+
+  function createPRNG(seed) {
+    let s = seed >>> 0;
+    return function() {
+      let t = s += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const PALETTE = [
+    { light: "#fef08a", body: "#facc15", deep: "#ca8a04", wing: "#eab308", accent: "#ef4444" },
+    { light: "#bae6fd", body: "#38bdf8", deep: "#0284c7", wing: "#0369a1", accent: "#facc15" },
+    { light: "#bbf7d0", body: "#4ade80", deep: "#15803d", wing: "#16a34a", accent: "#ffffff" },
+    { light: "#fbcfe8", body: "#f472b6", deep: "#be185d", wing: "#db2777", accent: "#fde047" },
+    { light: "#e9d5ff", body: "#c084fc", deep: "#6b21a8", wing: "#9333ea", accent: "#38bdf8" },
+    { light: "#fed7aa", body: "#fb923c", deep: "#c2410c", wing: "#ea580c", accent: "#1e293b" },
+    { light: "#fecaca", body: "#f87171", deep: "#b91c1c", wing: "#dc2626", accent: "#facc15" },
+    { light: "#99f6e4", body: "#2dd4bf", deep: "#0f766e", wing: "#0d9488", accent: "#ffffff" },
+    { light: "#ffffff", body: "#f1f5f9", deep: "#64748b", wing: "#cbd5e1", accent: "#ef4444" },
+    { light: "#fde68a", body: "#fbbf24", deep: "#92400e", wing: "#d97706", accent: "#10b981" }
+  ];
+
+  function getHatSVG(hatType, accent) {
+    switch (hatType % 8) {
+      case 0:
+        return `<polygon points="64,21 67,9 75,16 81,7 87,16 95,9 97,21" fill="#facc15" stroke="#0f172a" stroke-width="2.8" stroke-linejoin="round"/>
+                <circle cx="81" cy="7" r="2.3" fill="#ef4444"/><circle cx="67" cy="9" r="2" fill="#38bdf8"/><circle cx="95" cy="9" r="2" fill="#38bdf8"/>`;
+      case 1:
+        return `<ellipse cx="80" cy="19" rx="19" ry="4" fill="#1e293b" stroke="#0f172a" stroke-width="2.5"/>
+                <rect x="68" y="3" width="24" height="16" rx="2" fill="#1e293b" stroke="#0f172a" stroke-width="2.5"/>
+                <rect x="68" y="13" width="24" height="4" fill="${accent}"/>`;
+      case 2:
+        return `<path d="M 63 22 Q 80 6 97 22 Z" fill="${accent}" stroke="#0f172a" stroke-width="2.8"/>
+                <path d="M 73 14 Q 80 9 87 14" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>
+                <line x1="80" y1="7" x2="80" y2="12" stroke="#0f172a" stroke-width="3"/>
+                <ellipse cx="80" cy="7" rx="11" ry="2.5" fill="#facc15" stroke="#0f172a" stroke-width="2"/>`;
+      case 3:
+        return `<path d="M 56 20 Q 80 26 104 18 Q 96 15 92 17 L 88 6 Q 80 10 72 6 L 68 17 Q 62 15 56 20 Z" fill="#b45309" stroke="#0f172a" stroke-width="2.6" stroke-linejoin="round"/>`;
+      case 4:
+        return `<path d="M 62 23 Q 80 10 97 23 Z" fill="#dc2626" stroke="#0f172a" stroke-width="2.8"/>
+                <circle cx="59" cy="23" r="4" fill="#dc2626" stroke="#0f172a" stroke-width="2.5"/>
+                <path d="M 56 23 L 47 28 M 56 25 L 49 32" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>`;
+      case 5:
+        return `<path d="M 66 20 C 58 10, 68 2, 75 7 C 80 0, 88 2, 90 8 C 98 5, 102 14, 94 20 Z" fill="#ffffff" stroke="#0f172a" stroke-width="2.6" stroke-linejoin="round"/>`;
+      case 6:
+        return `<ellipse cx="80" cy="7" rx="14" ry="4" fill="none" stroke="#fde047" stroke-width="4"/>
+                <ellipse cx="80" cy="7" rx="14" ry="4" fill="none" stroke="#ca8a04" stroke-width="1.2"/>`;
+      default:
+        return `<path d="M 63 21 Q 79 7 95 20 Z" fill="${accent}" stroke="#0f172a" stroke-width="2.8"/>
+                <path d="M 88 18 L 107 20 Q 104 24 91 22 Z" fill="${accent}" stroke="#0f172a" stroke-width="2.4"/>`;
+    }
+  }
+
+  const duckSprites = {};
+  function getDuckSprite(styleIndex, hatType) {
+    const key = `${styleIndex}-${hatType}`;
+    if (duckSprites[key]) return duckSprites[key];
+
+    const st = PALETTE[styleIndex % PALETTE.length];
+    const hatSvg = getHatSVG(hatType, st.accent);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 110" width="64" height="55">
+      <defs>
+        <radialGradient id="bodyG" cx="38%" cy="28%" r="72%">
+          <stop offset="0%" stop-color="${st.light}"/>
+          <stop offset="50%" stop-color="${st.body}"/>
+          <stop offset="100%" stop-color="${st.deep}"/>
+        </radialGradient>
+        <radialGradient id="headG" cx="42%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="${st.light}"/>
+          <stop offset="55%" stop-color="${st.body}"/>
+          <stop offset="100%" stop-color="${st.deep}"/>
+        </radialGradient>
+        <linearGradient id="beakG" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#fb923c"/>
+          <stop offset="50%" stop-color="#f97316"/>
+          <stop offset="100%" stop-color="#c2410c"/>
+        </linearGradient>
+        <linearGradient id="lensG" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#0f172a"/>
+          <stop offset="50%" stop-color="#1e293b"/>
+          <stop offset="100%" stop-color="#020617"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="58" cy="92" rx="40" ry="8" fill="rgba(2, 44, 85, 0.45)"/>
+      <ellipse cx="60" cy="90" rx="33" ry="5" fill="${st.body}" opacity="0.22"/>
+      <path d="M 16 52 Q 11 45 21 48 Q 13 62 17 74 Q 22 89 52 90 L 78 90 Q 104 90 101 65 Q 99 49 75 52 L 34 52 Q 22 52 16 52 Z"
+            fill="url(#bodyG)" stroke="#0f172a" stroke-width="3.6" stroke-linejoin="round"/>
+      <path d="M 24 79 Q 55 87 92 78" fill="none" stroke="${st.deep}" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+      <path d="M 84 60 Q 94 65 90 77" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="3.8" stroke-linecap="round"/>
+      <ellipse cx="45" cy="57" rx="12" ry="3.5" fill="rgba(255,255,255,0.4)" transform="rotate(-6 45 57)"/>
+      <path d="M 33 61 Q 56 50 73 64 Q 65 72 56 71 Q 62 77 48 76 Q 30 74 33 61 Z"
+            fill="${st.wing}" stroke="#0f172a" stroke-width="3.2" stroke-linejoin="round"/>
+      <path d="M 40 63 Q 54 57 65 64" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="80" cy="36" r="20" fill="url(#headG)" stroke="#0f172a" stroke-width="3.6"/>
+      <ellipse cx="73" cy="25" rx="7" ry="4" fill="rgba(255,255,255,0.5)" transform="rotate(-18 73 25)"/>
+      <ellipse cx="89" cy="43" rx="4.5" ry="2.5" fill="#fb7185" opacity="0.55"/>
+      <path d="M 95 34 Q 112 37 109 43 Q 100 47 93 41 Z" fill="#ea580c" stroke="#0f172a" stroke-width="3.2" stroke-linejoin="round"/>
+      <path d="M 95 27 Q 119 30 116 38 Q 106 42 94 37 Z" fill="url(#beakG)" stroke="#0f172a" stroke-width="3.2" stroke-linejoin="round"/>
+      <path d="M 99 30 Q 110 31 112 35" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="2" stroke-linecap="round"/>
+      <line x1="61" y1="31" x2="75" y2="31" stroke="#0f172a" stroke-width="3.2"/>
+      <path d="M 74 28 L 100 28 L 97 38 Q 91 42 86 35 L 83 35 Q 78 41 72 36 Z" fill="url(#lensG)" stroke="#f8fafc" stroke-width="1.8" stroke-linejoin="round"/>
+      <line x1="78" y1="36" x2="83" y2="29" stroke="rgba(255,255,255,0.75)" stroke-width="2" stroke-linecap="round"/>
+      <line x1="89" y1="36" x2="94" y2="29" stroke="rgba(255,255,255,0.75)" stroke-width="2" stroke-linecap="round"/>
+      ${hatSvg}
+    </svg>`;
+
+    const img = new Image();
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+    duckSprites[key] = img;
+    return img;
+  }
+
+  const canvas = document.getElementById("raceCanvas");
+  const ctx = canvas.getContext("2d");
+
+  const START_X = 90;
+  const FINISH_X = canvas.width - 130;
+  const RIVER_TOP = 62;
+  const RIVER_BOTTOM = canvas.height - 54;
+  const COUNTDOWN_SECS = 3.0;
+  const BASE_DURATION = 15.0;
+
+  let raceData = null;
+  let winnersOrder = [];
+  let ducks = [];
+  let confetti = [];
+  let startTime = null;
+  let animId = null;
+  let searchQuery = "";
+  let mousePos = { x: -999, y: -999 };
+
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mousePos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    mousePos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  });
+  canvas.addEventListener("mouseleave", () => { mousePos = { x: -999, y: -999 }; });
+
+  document.getElementById("search-duck").addEventListener("input", (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderHighlightList();
+  });
+
+  function initDucks() {
+    const rand = createPRNG(raceData.seed || 1337);
+    confetti = [];
+    const total = winnersOrder.length;
+    const totalSpread = Math.min(8.5, Math.max(3.5, total * 0.12));
+
+    ducks = winnersOrder.map((name, rankIndex) => {
+      const podiumGap = rankIndex < 5 ? rankIndex * 0.22 : 0.88 + ((rankIndex - 5) / Math.max(1, total - 5)) * totalSpread;
+      const finishTime = BASE_DURATION + podiumGap;
+      const styleIdx = Math.floor(rand() * PALETTE.length);
+      const hatIdx = rankIndex === 0 ? 0 : Math.floor(rand() * 8);
+
+      return {
+        name,
+        rank: rankIndex + 1,
+        styleIdx,
+        hatIdx,
+        style: PALETTE[styleIdx],
+        finishTime,
+        baseY: RIVER_TOP + 15 + rand() * (RIVER_BOTTOM - RIVER_TOP - 30),
+        yDriftFreq: 0.7 + rand() * 1.4,
+        yDriftPhase: rand() * Math.PI * 2,
+        yDriftAmp: 8 + rand() * 14,
+        startJitterX: (rand() - 0.5) * 34,
+        freq1: 1.6 + rand() * 2.4,
+        freq2: 3.8 + rand() * 3.2,
+        phase1: rand() * Math.PI * 2,
+        phase2: rand() * Math.PI * 2,
+        amp: 0.11 + rand() * 0.08,
+        x: START_X,
+        y: 0,
+        prevX: START_X,
+        speed: 0,
+        finished: false
+      };
+    });
+  }
+
+  function getDuckX(duck, t) {
+    const originX = START_X + duck.startJitterX;
+    if (t <= 0) return originX;
+    const p = t / duck.finishTime;
+    if (p >= 1.0) {
+      const extra = (t - duck.finishTime) * 45;
+      return FINISH_X + Math.min(extra, 95);
+    }
+    const envelope = Math.sin(Math.PI * p);
+    const surge = envelope * duck.amp * (
+      Math.sin(p * Math.PI * duck.freq1 + duck.phase1) * 0.65 +
+      Math.sin(p * Math.PI * duck.freq2 + duck.phase2) * 0.35
+    );
+    const clamped = Math.max(0, Math.min(0.999, p + surge));
+    return originX + clamped * (FINISH_X - originX);
+  }
+
+  function drawEnvironment(elapsed) {
+    const waterGrad = ctx.createLinearGradient(0, 35, 0, canvas.height - 35);
+    waterGrad.addColorStop(0, "#075985");
+    waterGrad.addColorStop(0.5, "#0284c7");
+    waterGrad.addColorStop(1, "#0369a1");
+    ctx.fillStyle = waterGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "rgba(186, 230, 253, 0.18)";
+    ctx.lineWidth = 2.5;
+    const waveOffset = (elapsed * 55) % 90;
+    for (let x = -90; x < canvas.width + 90; x += 90) {
+      for (let y = 68; y < canvas.height - 52; y += 56) {
+        ctx.beginPath();
+        ctx.arc(x - waveOffset, y, 16, 0.2 * Math.PI, 0.8 * Math.PI);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = "#15803d";
+    ctx.fillRect(0, 0, canvas.width, 32);
+    ctx.fillRect(0, canvas.height - 32, canvas.width, 32);
+    ctx.fillStyle = "#92400e";
+    ctx.fillRect(0, 28, canvas.width, 7);
+    ctx.fillRect(0, canvas.height - 35, canvas.width, 7);
+
+    [39, canvas.height - 39].forEach(by => {
+      for (let bx = 0; bx < canvas.width; bx += 28) {
+        ctx.fillStyle = (Math.floor(bx / 28) % 2 === 0) ? "#ef4444" : "#ffffff";
+        ctx.beginPath();
+        ctx.roundRect(bx, by - 2, 18, 5, 2.5);
+        ctx.fill();
+      }
+    });
+
+    const checkSize = 12;
+    for (let y = 35; y < canvas.height - 35; y += checkSize) {
+      for (let col = 0; col < 2; col++) {
+        ctx.fillStyle = ((Math.floor(y / checkSize) + col) % 2 === 0) ? "#ffffff" : "#0f172a";
+        ctx.fillRect(FINISH_X + col * checkSize, y, checkSize, checkSize);
+      }
+    }
+  }
+
+  function render(now) {
+    if (!startTime) startTime = now;
+    const totalElapsed = (now - startTime) / 1000;
+    const raceTime = totalElapsed - COUNTDOWN_SECS;
+
+    document.getElementById("timer").textContent = raceTime > 0 ? `${raceTime.toFixed(1)}s` : `00.0s`;
+    drawEnvironment(Math.max(0, totalElapsed));
+
+    let allFinished = true;
+    let firstJustFinished = false;
+
+    ducks.forEach(duck => {
+      const newX = getDuckX(duck, raceTime);
+      duck.speed = newX - duck.prevX;
+      duck.prevX = duck.x;
+      duck.x = newX;
+
+      const weave = raceTime > 0 && !duck.finished
+        ? Math.sin(raceTime * duck.yDriftFreq + duck.yDriftPhase) * duck.yDriftAmp
+        : 0;
+      const bob = Math.sin(totalElapsed * 8 + duck.rank) * 2.2;
+      duck.y = Math.max(RIVER_TOP, Math.min(RIVER_BOTTOM, duck.baseY + weave + bob));
+
+      const wasFinished = duck.finished;
+      duck.finished = raceTime >= duck.finishTime;
+      if (!wasFinished && duck.finished && duck.rank === 1) firstJustFinished = true;
+      if (!duck.finished) allFinished = false;
+    });
+
+    const liveStandings = [...ducks].sort((a, b) => {
+      if (a.finished && b.finished) return a.rank - b.rank;
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return b.x - a.x;
+    });
+    const top5Ranks = new Set(liveStandings.slice(0, 5).map(d => d.rank));
+
+    if (raceTime > 0) {
+      document.getElementById("live-ticker").innerHTML =
+        `🥇 <strong>${liveStandings[0].name}</strong> &nbsp;|&nbsp; ` +
+        `🥈 ${liveStandings[1]?.name || '-'} &nbsp;|&nbsp; ` +
+        `🥉 ${liveStandings[2]?.name || '-'}`;
+    }
+
+    let hoveredDuck = null;
+    let minHoverDist = 28;
+    ducks.forEach(d => {
+      const dist = Math.hypot(d.x - mousePos.x, d.y - mousePos.y);
+      if (dist < minHoverDist) { minHoverDist = dist; hoveredDuck = d; }
+    });
+
+    const ySortedDucks = [...ducks].sort((a, b) => a.y - b.y);
+    const labeledDucks = [];
+
+    ySortedDucks.forEach(duck => {
+      const isSearched = searchQuery.length > 0 && duck.name.toLowerCase().includes(searchQuery);
+      const isHovered = hoveredDuck === duck;
+      const isLeader = raceTime > 0 && top5Ranks.has(duck.rank);
+
+      ctx.save();
+      ctx.translate(duck.x, duck.y);
+
+      if (raceTime > 0 && !duck.finished) {
+        const wakeLen = 18 + Math.min(22, duck.speed * 14);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-16, 8);
+        ctx.lineTo(-16 - wakeLen, 3);
+        ctx.moveTo(-16, 12);
+        ctx.lineTo(-16 - wakeLen * 0.8, 17);
+        ctx.stroke();
+
+        const bx = -20 - ((totalElapsed * 42 + duck.rank * 11) % 24);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+        ctx.beginPath();
+        ctx.arc(bx, 10, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isSearched) {
+        ctx.strokeStyle = "#facc15";
+        ctx.lineWidth = 3;
+        ctx.fillStyle = "rgba(250, 204, 21, 0.25)";
+        ctx.beginPath();
+        ctx.arc(0, 2, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      const pitch = raceTime > 0 && !duck.finished ? Math.min(0.11, Math.max(-0.06, (duck.speed - 0.8) * 0.04)) : 0;
+      ctx.rotate(pitch);
+
+      const sprite = getDuckSprite(duck.styleIdx, duck.hatIdx);
+      if (sprite.complete) {
+        ctx.drawImage(sprite, -32, -29, 64, 55);
+      }
+      ctx.restore();
+
+      if (isSearched || isHovered || isLeader || (duck.finished && duck.rank <= 5)) {
+        labeledDucks.push({ duck, isSearched, isHovered, liveRank: liveStandings.indexOf(duck) + 1 });
+      }
+    });
+
+    labeledDucks.forEach(({ duck, isSearched, isHovered, liveRank }) => {
+      ctx.save();
+      ctx.translate(duck.x, duck.y);
+      const labelText = `${liveRank <= 3 && raceTime > 0 ? `#${liveRank} ` : ''}${duck.name}`;
+      ctx.font = "700 12px 'Segoe UI', system-ui, sans-serif";
+      const padX = 8;
+      const textW = ctx.measureText(labelText).width;
+      const boxW = textW + padX * 2;
+      const boxX = -boxW / 2;
+      const boxY = -43;
+
+      ctx.fillStyle = isSearched ? "#facc15" : isHovered ? "#38bdf8" : "rgba(15, 23, 42, 0.92)";
+      ctx.strokeStyle = isSearched || isHovered ? "#0f172a" : duck.style.body;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, 20, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = (isSearched || isHovered) ? "#0f172a" : "#f8fafc";
+      ctx.fillText(labelText, boxX + padX, boxY + 14);
+      ctx.restore();
+    });
+
+    if (firstJustFinished) {
+      for (let i = 0; i < 95; i++) {
+        confetti.push({
+          x: FINISH_X, y: canvas.height / 2,
+          vx: (Math.random() - 0.7) * 12, vy: (Math.random() - 0.9) * 14,
+          color: PALETTE[i % PALETTE.length].body, size: 6
+        });
+      }
+    }
+
+    confetti.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.35;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
+
+    if (raceTime < 0.6) {
+      ctx.save();
+      if (raceTime < 0) {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.45)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      const label = raceTime < -2 ? "3" : raceTime < -1 ? "2" : raceTime < 0 ? "1" : "QUACK!";
+      ctx.font = "900 84px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#facc15";
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 8;
+      ctx.strokeText(label, canvas.width / 2, canvas.height / 2 + 28);
+      ctx.fillText(label, canvas.width / 2, canvas.height / 2 + 28);
+      ctx.restore();
+    }
+
+    const lastDuckFinish = ducks.reduce((max, d) => Math.max(max, d.finishTime), 0);
+    if (!allFinished || raceTime < lastDuckFinish + 1.5) {
+      animId = requestAnimationFrame(render);
+    } else {
+      showScoreboard();
+    }
+  }
+
+  function renderHighlightList() {
+    document.querySelectorAll(".rank-card").forEach(card => {
+      const name = card.getAttribute("data-name") || "";
+      card.classList.toggle("highlight", searchQuery.length > 0 && name.includes(searchQuery));
+    });
+  }
+
+  function showScoreboard() {
+    const podium = document.getElementById("podium");
+    podium.innerHTML = `
+      ${winnersOrder[1] ? `<div class="podium-spot second"><div class="podium-name">🥈 ${winnersOrder[1]}</div><div class="podium-bar">2nd</div></div>` : ''}
+      <div class="podium-spot first"><div class="podium-name">🏆 ${winnersOrder[0]}</div><div class="podium-bar">1st</div></div>
+      ${winnersOrder[2] ? `<div class="podium-spot third"><div class="podium-name">🥉 ${winnersOrder[2]}</div><div class="podium-bar">3rd</div></div>` : ''}
+    `;
+
+    const list = document.getElementById("results-list");
+    list.innerHTML = "";
+    ducks.slice().sort((a, b) => a.rank - b.rank).forEach((d) => {
+      const card = document.createElement("div");
+      card.className = "rank-card";
+      card.setAttribute("data-name", d.name.toLowerCase());
+      card.innerHTML = `<div><span class="rank-num">#${d.rank}</span><strong>${d.name}</strong></div><span class="rank-time">${d.finishTime.toFixed(2)}s</span>`;
+      list.appendChild(card);
+    });
+    renderHighlightList();
+    document.getElementById("results").style.display = "block";
+  }
+
+  async function boot() {
+    raceData = await loadRaceData();
+    winnersOrder = raceData.results;
+    document.getElementById("race-title").textContent = raceData.title || "Championship Duck Derby";
+
+    const sub = document.getElementById("race-subtitle");
+    if (raceData.verifyId) {
+      sub.innerHTML = `<a href="https://giveaways.random.org/verify/${raceData.verifyId}" target="_blank" rel="noopener">✅ Verified by Random.org (${raceData.verifyId}) — Click to Audit</a> • ${winnersOrder.length} Racers`;
+    } else {
+      sub.textContent = `${winnersOrder.length} Verified Racers • Hover any duck or search above to spotlight`;
+    }
+
+    const start = () => {
+      if (animId) cancelAnimationFrame(animId);
+      document.getElementById("results").style.display = "none";
+      initDucks();
+      startTime = null;
+      animId = requestAnimationFrame(render);
+    };
+    document.getElementById("replay-btn").addEventListener("click", start);
+    start();
+  }
+
+  boot();
+</script>
+</body>
+</html>
