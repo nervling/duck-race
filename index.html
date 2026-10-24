@@ -169,19 +169,17 @@
 <script>
   const DEFAULT_GITHUB_USER = "nervling";
   const DEFAULT_GIST_ID = "3b99e05c9bd5c41d3effabdfb34810a4";
-  // Parse start time synchronously right away so countdown starts before network fetch
+
   const params = new URLSearchParams(window.location.search);
   const rawStart = params.get("start");
   let globalStartTime = rawStart ? (/^\d+$/.test(rawStart) ? parseInt(rawStart, 10) : new Date(rawStart).getTime()) : null;
 
-  // Parse either JSON {"results": [...]} OR plain numbered text pasted into a Gist!
   function parseGistContent(rawText, gistId) {
     try {
       const data = JSON.parse(rawText);
       if (Array.isArray(data.results) && data.results.length > 0) return data;
       if (Array.isArray(data) && data.length > 0) return { title: "Official Duck Derby", results: data };
     } catch (_) {
-      // If user pasted raw numbered Random.org text into the Gist instead of JSON, parse it automatically!
       const cleaned = rawText
         .split(/\r?\n/)
         .map(line => line.trim().replace(/^\d+\.[\s\u00A0]+/, "").replace(/#\d+$/, "").trim())
@@ -194,12 +192,10 @@
   }
 
   async function loadRaceData() {
-    // 1. Check if server pre-injected data
     if (window.SERVER_RACE_DATA) return window.SERVER_RACE_DATA;
 
     const gistParam = params.get("gist") || DEFAULT_GIST_ID;
 
-    // 2. Fetch from GitHub Gist Raw CDN if gist parameter is present
     if (gistParam) {
       document.getElementById("live-ticker").textContent = "Loading race from Gist CDN...";
       try {
@@ -227,7 +223,6 @@
       }
     }
 
-    // 3. No fallback: Display error state on screen
     document.getElementById("live-ticker").textContent = "❌ Failed to load race data.";
     document.getElementById("race-subtitle").textContent = "Could not fetch or parse the Gist URL.";
     
@@ -490,21 +485,31 @@
     }
   }
 
-function render(now) {
+  function render(now) {
     if (!startTime) startTime = now;
     
     // Synchronized Start Check
-    if (raceData.startTime && Date.now() < raceData.startTime) {
-      const millisLeft = raceData.startTime - Date.now();
+    const activeStartTime = raceData?.startTime || globalStartTime;
+    if (activeStartTime && Date.now() < activeStartTime) {
+      const millisLeft = activeStartTime - Date.now();
       const secsLeft = (millisLeft / 1000).toFixed(1);
       
-      // Draw static environment & ducks frozen at the gate
       drawEnvironment(0);
-      ducks.forEach(duck => {
-        duck.x = START_X + duck.startJitterX;
-        duck.y = duck.baseY;
-        drawRubberDuck(duck, duck.y, 0);
-      });
+      
+      // Draw ducks sitting at the starting gate while waiting
+      if (ducks.length > 0) {
+        ducks.forEach(duck => {
+          duck.x = START_X + duck.startJitterX;
+          duck.y = duck.baseY;
+          ctx.save();
+          ctx.translate(duck.x, duck.y);
+          const sprite = getDuckSprite(duck.styleIdx, duck.hatIdx);
+          if (sprite && sprite.complete) {
+            ctx.drawImage(sprite, -32, -29, 64, 55);
+          }
+          ctx.restore();
+        });
+      }
 
       // Show live waiting banner on screen
       ctx.save();
@@ -513,30 +518,28 @@ function render(now) {
       ctx.font = "900 36px 'Segoe UI', system-ui";
       ctx.textAlign = "center";
       ctx.fillStyle = "#facc15";
-      ctx.fillText(`Synchronized Race Starting In...`, canvas.width / 2, canvas.height / 2 - 20);
+      ctx.fillText("Synchronized Race Starting In...", canvas.width / 2, canvas.height / 2 - 20);
       ctx.font = "900 64px monospace";
       ctx.fillStyle = "#38bdf8";
       ctx.fillText(`${secsLeft}s`, canvas.width / 2, canvas.height / 2 + 50);
       ctx.restore();
 
       document.getElementById("live-ticker").textContent = `Waiting for sync start (${secsLeft}s)...`;
-      document.getElementById("timer").textContent = `00.0s`;
+      document.getElementById("timer").textContent = "00.0s";
       
       animId = requestAnimationFrame(render);
-      return; // Hold frame until timestamp is reached!
+      return; 
     }
 
-    // Once timestamp passes, reset startTime reference so the race begins instantly!
-    if (raceData.startTime && !window._syncStartedFlag) {
+    if (activeStartTime && !window._syncStartedFlag) {
       window._syncStartedFlag = true;
-      startTime = now; // Reset timer zero point so animation starts right now for everyone
+      startTime = now; 
     }
 
     const totalElapsed = (now - startTime) / 1000;
     const raceTime = totalElapsed - COUNTDOWN_SECS;
-    // ... [rest of your normal render loop] ...
 
-    document.getElementById("timer").textContent = raceTime > 0 ? `${raceTime.toFixed(1)}s` : `00.0s`;
+    document.getElementById("timer").textContent = raceTime > 0 ? `${raceTime.toFixed(1)}s` : "00.0s";
     drawEnvironment(Math.max(0, totalElapsed));
 
     let allFinished = true;
@@ -626,7 +629,7 @@ function render(now) {
       ctx.rotate(pitch);
 
       const sprite = getDuckSprite(duck.styleIdx, duck.hatIdx);
-      if (sprite.complete) {
+      if (sprite && sprite.complete) {
         ctx.drawImage(sprite, -32, -29, 64, 55);
       }
       ctx.restore();
@@ -729,14 +732,15 @@ function render(now) {
     document.getElementById("results").style.display = "block";
   }
 
-  async function boot() {
-    if (globalStartTime && Date.now() < globalStartTime) {
-      document.getElementById("live-ticker").textContent = "Waiting for sync start...";
-    }
+  let isWaitingForSync = globalStartTime && Date.now() < globalStartTime;
+  if (isWaitingForSync) {
+    document.getElementById("live-ticker").textContent = "Waiting for sync start...";
+    animId = requestAnimationFrame(render);
+  }
 
-    raceData = await loadRaceData();
-    if (!raceData || !raceData.results) return;
-
+  loadRaceData().then(data => {
+    if (!data || !data.results) return;
+    raceData = data;
     winnersOrder = raceData.results;
     document.getElementById("race-title").textContent = raceData.title || "Championship Duck Derby";
 
@@ -747,18 +751,22 @@ function render(now) {
       sub.textContent = `${winnersOrder.length} Verified Racers • Hover any duck or search above to spotlight`;
     }
 
-    const start = () => {
+    initDucks();
+    if (!isWaitingForSync) {
       if (animId) cancelAnimationFrame(animId);
-      document.getElementById("results").style.display = "none";
-      initDucks();
       startTime = null;
       animId = requestAnimationFrame(render);
-    };
-    document.getElementById("replay-btn").addEventListener("click", start);
-    start();
-  }
+    }
+  });
 
-  boot();
+  document.getElementById("replay-btn").addEventListener("click", () => {
+    if (!raceData) return;
+    if (animId) cancelAnimationFrame(animId);
+    document.getElementById("results").style.display = "none";
+    initDucks();
+    startTime = null;
+    animId = requestAnimationFrame(render);
+  });
 </script>
 </body>
 </html>
