@@ -534,7 +534,7 @@
       ctx.fillText(timeString, canvas.width / 2, canvas.height / 2 + 50);
       ctx.restore();
 
-      document.getElementById("live-ticker").textContent = `Waiting for sync start (${secsLeft}s)...`;
+      document.getElementById("live-ticker").textContent = `Waiting for start (${timeString}s)...`;
       document.getElementById("timer").textContent = "00.0s";
       
       animId = requestAnimationFrame(render);
