@@ -511,6 +511,16 @@
         });
       }
 
+      // Format countdown text dynamically: minutes + seconds vs seconds only
+      let timeString = "";
+      if (millisLeft >= 60000) {
+        const mins = Math.floor(millisLeft / 60000);
+        const secs = Math.floor((millisLeft % 60000) / 1000);
+        timeString = `${mins}m ${secs}s`;
+      } else {
+        timeString = `${secsLeft}s`;
+      }
+
       // Show live waiting banner on screen
       ctx.save();
       ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
@@ -518,10 +528,10 @@
       ctx.font = "900 36px 'Segoe UI', system-ui";
       ctx.textAlign = "center";
       ctx.fillStyle = "#facc15";
-      ctx.fillText("Synchronized Race Starting In...", canvas.width / 2, canvas.height / 2 - 20);
+      ctx.fillText("Race Starting In...", canvas.width / 2, canvas.height / 2 - 20);
       ctx.font = "900 64px monospace";
       ctx.fillStyle = "#38bdf8";
-      ctx.fillText(`${secsLeft}s`, canvas.width / 2, canvas.height / 2 + 50);
+      ctx.fillText(timeString, canvas.width / 2, canvas.height / 2 + 50);
       ctx.restore();
 
       document.getElementById("live-ticker").textContent = `Waiting for sync start (${secsLeft}s)...`;
