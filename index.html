@@ -189,28 +189,36 @@
     return null;
   }
 
-  async function loadRaceData() {
+async function loadRaceData() {
+    // 1. Check if server pre-injected data
     if (window.SERVER_RACE_DATA) return window.SERVER_RACE_DATA;
 
     const params = new URLSearchParams(window.location.search);
     const gistParam = params.get("gist") || DEFAULT_GIST_ID;
 
+    // 2. Parse optional start timestamp (e.g. ?start=1761350400000 or ISO string)
+    const rawStart = params.get("start");
+    let targetStartTime = null;
+    if (rawStart) {
+      targetStartTime = /^\d+$/.test(rawStart) ? parseInt(rawStart, 10) : new Date(rawStart).getTime();
+    }
+
+    // 3. Fetch from GitHub Gist Raw CDN if gist parameter is present
     if (gistParam) {
       document.getElementById("live-ticker").textContent = "Loading race from Gist CDN...";
       try {
-        // Clean full gist URLs if someone passes ?gist=https://gist.github.com/nervling/3b99...
         let cleanPath = gistParam.trim().replace(/^https?:\/\/gist\.github\.com\//, "").replace(/\/+$/, "");
         if (!cleanPath.includes("/")) {
           cleanPath = `${DEFAULT_GITHUB_USER}/${cleanPath}`;
         }
 
-        // /raw with no filename automatically serves the first file in the Gist over Fastly CDN with CORS (*)
         const rawUrl = `https://gist.githubusercontent.com/${cleanPath}/raw`;
         const res = await fetch(rawUrl);
         if (res.ok) {
           const text = await res.text();
           const data = parseGistContent(text, cleanPath);
           if (data && data.results.length > 0) {
+            data.startTime = targetStartTime;
             if (!data.seed) {
               const seedStr = data.verifyId || cleanPath || data.results.slice(0, 10).join("");
               data.seed = Array.from(seedStr).reduce((acc, c) => acc * 31 + c.charCodeAt(0), 7);
@@ -223,17 +231,25 @@
       }
     }
 
-    // Fallback 100-Duck Race if offline
-    const fallbackNames = [
-      "Kevin(2)", "Eric (NE)(3)", "KAWJ(5)", "SixPackOfMillers", "CartyFam",
-      "Kevin G(1)", "Nick", "hellcat(2)", "Kevin G(2)", "AfternoonDeelite"
-    ];
-    return {
-      title: "Official Duck Derby (Fallback)",
-      results: fallbackNames,
-      seed: 20261024,
-      verifyId: "yzzgsj"
-    };
+    // 4. No fallback: Display error state on screen
+    document.getElementById("live-ticker").textContent = "❌ Failed to load race data.";
+    document.getElementById("race-subtitle").textContent = "Could not fetch or parse the Gist URL.";
+    
+    // Render an error message onto the canvas stage
+    const canvas = document.getElementById("raceCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#0284c7";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = "900 28px 'Segoe UI', system-ui";
+    ctx.fillStyle = "#f8fafc";
+    ctx.textAlign = "center";
+    ctx.fillText("⚠️ Couldn't load race data from Gist", canvas.width / 2, canvas.height / 2 - 15);
+    ctx.font = "400 16px 'Segoe UI', system-ui";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("Check your ?gist= parameter or network connection.", canvas.width / 2, canvas.height / 2 + 25);
+
+    // Return a dummy empty payload that halts animation gracefully
+    return null;
   }
 
   function createPRNG(seed) {
@@ -480,10 +496,51 @@
     }
   }
 
-  function render(now) {
+function render(now) {
     if (!startTime) startTime = now;
+    
+    // Synchronized Start Check
+    if (raceData.startTime && Date.now() < raceData.startTime) {
+      const millisLeft = raceData.startTime - Date.now();
+      const secsLeft = (millisLeft / 1000).toFixed(1);
+      
+      // Draw static environment & ducks frozen at the gate
+      drawEnvironment(0);
+      ducks.forEach(duck => {
+        duck.x = START_X + duck.startJitterX;
+        duck.y = duck.baseY;
+        drawRubberDuck(duck, duck.y, 0);
+      });
+
+      // Show live waiting banner on screen
+      ctx.save();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = "900 36px 'Segoe UI', system-ui";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#facc15";
+      ctx.fillText(`Synchronized Race Starting In...`, canvas.width / 2, canvas.height / 2 - 20);
+      ctx.font = "900 64px monospace";
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText(`${secsLeft}s`, canvas.width / 2, canvas.height / 2 + 50);
+      ctx.restore();
+
+      document.getElementById("live-ticker").textContent = `Waiting for sync start (${secsLeft}s)...`;
+      document.getElementById("timer").textContent = `00.0s`;
+      
+      animId = requestAnimationFrame(render);
+      return; // Hold frame until timestamp is reached!
+    }
+
+    // Once timestamp passes, reset startTime reference so the race begins instantly!
+    if (raceData.startTime && !window._syncStartedFlag) {
+      window._syncStartedFlag = true;
+      startTime = now; // Reset timer zero point so animation starts right now for everyone
+    }
+
     const totalElapsed = (now - startTime) / 1000;
     const raceTime = totalElapsed - COUNTDOWN_SECS;
+    // ... [rest of your normal render loop] ...
 
     document.getElementById("timer").textContent = raceTime > 0 ? `${raceTime.toFixed(1)}s` : `00.0s`;
     drawEnvironment(Math.max(0, totalElapsed));
