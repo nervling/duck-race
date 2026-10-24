@@ -169,6 +169,10 @@
 <script>
   const DEFAULT_GITHUB_USER = "nervling";
   const DEFAULT_GIST_ID = "3b99e05c9bd5c41d3effabdfb34810a4";
+  // Parse start time synchronously right away so countdown starts before network fetch
+  const params = new URLSearchParams(window.location.search);
+  const rawStart = params.get("start");
+  let globalStartTime = rawStart ? (/^\d+$/.test(rawStart) ? parseInt(rawStart, 10) : new Date(rawStart).getTime()) : null;
 
   // Parse either JSON {"results": [...]} OR plain numbered text pasted into a Gist!
   function parseGistContent(rawText, gistId) {
@@ -189,21 +193,13 @@
     return null;
   }
 
-async function loadRaceData() {
+  async function loadRaceData() {
     // 1. Check if server pre-injected data
     if (window.SERVER_RACE_DATA) return window.SERVER_RACE_DATA;
 
-    const params = new URLSearchParams(window.location.search);
     const gistParam = params.get("gist") || DEFAULT_GIST_ID;
 
-    // 2. Parse optional start timestamp (e.g. ?start=1761350400000 or ISO string)
-    const rawStart = params.get("start");
-    let targetStartTime = null;
-    if (rawStart) {
-      targetStartTime = /^\d+$/.test(rawStart) ? parseInt(rawStart, 10) : new Date(rawStart).getTime();
-    }
-
-    // 3. Fetch from GitHub Gist Raw CDN if gist parameter is present
+    // 2. Fetch from GitHub Gist Raw CDN if gist parameter is present
     if (gistParam) {
       document.getElementById("live-ticker").textContent = "Loading race from Gist CDN...";
       try {
@@ -218,7 +214,7 @@ async function loadRaceData() {
           const text = await res.text();
           const data = parseGistContent(text, cleanPath);
           if (data && data.results.length > 0) {
-            data.startTime = targetStartTime;
+            data.startTime = globalStartTime;
             if (!data.seed) {
               const seedStr = data.verifyId || cleanPath || data.results.slice(0, 10).join("");
               data.seed = Array.from(seedStr).reduce((acc, c) => acc * 31 + c.charCodeAt(0), 7);
@@ -231,11 +227,10 @@ async function loadRaceData() {
       }
     }
 
-    // 4. No fallback: Display error state on screen
+    // 3. No fallback: Display error state on screen
     document.getElementById("live-ticker").textContent = "❌ Failed to load race data.";
     document.getElementById("race-subtitle").textContent = "Could not fetch or parse the Gist URL.";
     
-    // Render an error message onto the canvas stage
     const canvas = document.getElementById("raceCanvas");
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#0284c7";
@@ -248,7 +243,6 @@ async function loadRaceData() {
     ctx.fillStyle = "#94a3b8";
     ctx.fillText("Check your ?gist= parameter or network connection.", canvas.width / 2, canvas.height / 2 + 25);
 
-    // Return a dummy empty payload that halts animation gracefully
     return null;
   }
 
@@ -736,7 +730,13 @@ function render(now) {
   }
 
   async function boot() {
+    if (globalStartTime && Date.now() < globalStartTime) {
+      document.getElementById("live-ticker").textContent = "Waiting for sync start...";
+    }
+
     raceData = await loadRaceData();
+    if (!raceData || !raceData.results) return;
+
     winnersOrder = raceData.results;
     document.getElementById("race-title").textContent = raceData.title || "Championship Duck Derby";
 
